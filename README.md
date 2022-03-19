@@ -1,2 +1,2 @@
 # Personal Website
-Check it out at [srinivasanant.com](srinivasanant.com)
+Check it out at [srinivasanant.com](https://srinivasanant.com)
