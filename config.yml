@@ -41,7 +41,6 @@ params:
           url: "https://github.com/jsanant"
         - name: linkedin
           url: "https://in.linkedin.com/in/srinivasanant"
-        - name: rss
 
 menu:
     main:
