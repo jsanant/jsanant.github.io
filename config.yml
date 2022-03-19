@@ -53,10 +53,10 @@ menu:
           name: Tags
           url: tags/
           weight: 20
-        - identifier: projects
-          name: Projects
-          url: projects/
-          weight: 30
+        # - identifier: projects
+        #   name: Projects
+        #   url: projects/
+        #   weight: 30
         - identifier: archives
           name: Archives
           url: archives/
