@@ -29,10 +29,7 @@ params:
       homeInfoParams:
         Title: "Hello Friend."
         Content: >
-          I am Anant, here to talk about SRE, DevOps and everything in between. 
-          <br />
-          If you want to contact me please follow the [No Hello](https://www.nohello.com/) rule. 
-          I am mostly active on twitter.
+          I am Anant, here to talk about DevOps, monitoring and everything in between.
 
       socialIcons:
         - name: twitter
