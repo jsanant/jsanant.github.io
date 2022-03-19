@@ -1,0 +1,63 @@
+baseURL: "https://srinivasanant.com/"
+title: Srinivas Anant
+paginate: 5
+theme: PaperMod
+enableInlineShortcodes: true
+
+# enableRobotsTXT: true
+# buildDrafts: false
+# buildFuture: false
+# buildExpired: false
+
+# googleAnalytics: UA-123-45
+
+# minify:
+#     disableXML: true
+#     minifyOutput: true
+
+params:
+      env: production # to enable google analytics, opengraph, twitter-cards and schema.
+      description: "ExampleSite description"
+      keywords: [Blog, Portfolio, PaperMod]
+      ShowReadingTime: true
+      enableEmoji: true
+      displayFullLangName: true
+      ShowPostNavLinks: true
+      ShowCodeCopyButtons: true
+      disableScrollToTop: false
+
+      homeInfoParams:
+        Title: "Hello Friend."
+        Content: >
+          I am Anant, here to talk about SRE, DevOps and everything in between. 
+          <br />
+          If you want to contact me please follow the [No Hello](https://www.nohello.com/) rule. 
+          I am mostly active on twitter.
+
+      socialIcons:
+        - name: twitter
+          url: "https://twitter.com/srinivas_anant"
+        - name: github
+          url: "https://github.com/jsanant"
+        - name: linkedin
+          url: "https://in.linkedin.com/in/srinivasanant"
+        - name: rss
+
+menu:
+    main:
+        - identifier: posts
+          name: Posts
+          url: posts/
+          weight: 10
+        - identifier: tags
+          name: Tags
+          url: tags/
+          weight: 20
+        - identifier: projects
+          name: Projects
+          url: projects/
+          weight: 30
+        - identifier: archives
+          name: Archives
+          url: archives/
+          weight: 30
