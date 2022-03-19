@@ -17,8 +17,8 @@ enableInlineShortcodes: true
 
 params:
       env: production # to enable google analytics, opengraph, twitter-cards and schema.
-      description: "ExampleSite description"
-      keywords: [Blog, Portfolio, PaperMod]
+      description: "Personal Blog"
+      keywords: [Blog, Portfolio]
       ShowReadingTime: true
       enableEmoji: true
       displayFullLangName: true
