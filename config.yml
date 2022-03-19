@@ -27,7 +27,7 @@ params:
       disableScrollToTop: false
 
       homeInfoParams:
-        Title: "Hello Friend."
+        Title: "Hello Friend!"
         Content: >
           I am Anant, here to talk about DevOps, monitoring and everything in between.
 
