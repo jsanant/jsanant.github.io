@@ -38,6 +38,8 @@ params:
           url: "https://github.com/jsanant"
         - name: linkedin
           url: "https://in.linkedin.com/in/srinivasanant"
+        - name: goodreads
+          url: "https://www.goodreads.com/srinivas_anant"
 
 menu:
     main:
