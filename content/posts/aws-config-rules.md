@@ -1,5 +1,6 @@
 ---
 title: "AWS Config Rules"
+summary: "How different trigger types work in AWS Config"
 date: 2022-02-28T20:32:58+05:30
 draft: false
 tags: ['AWS', 'AWS Config']
