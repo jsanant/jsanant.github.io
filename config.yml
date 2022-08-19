@@ -4,58 +4,42 @@ paginate: 5
 theme: PaperMod
 enableInlineShortcodes: true
 
-# enableRobotsTXT: true
-# buildDrafts: false
-# buildFuture: false
-# buildExpired: false
-
-# googleAnalytics: UA-123-45
-
-# minify:
-#     disableXML: true
-#     minifyOutput: true
-
 params:
-      env: production # to enable google analytics, opengraph, twitter-cards and schema.
-      description: "Personal Blog"
-      keywords: [Blog, Portfolio]
-      ShowReadingTime: true
-      enableEmoji: true
-      displayFullLangName: true
-      ShowPostNavLinks: true
-      ShowCodeCopyButtons: true
-      disableScrollToTop: false
+  author: Srinivas Anant
+  description: "Personal Blog"
+  keywords: [Blog, Portfolio]
+  ShowReadingTime: true
+  enableEmoji: true
+  displayFullLangName: true
+  ShowCodeCopyButtons: true
+  disableScrollToTop: false
+  enableGoogleAnalytics: false
+  disableThemeToggle: true
 
-      homeInfoParams:
-        Title: "Hello Friend!"
-        Content: >
-          I am Anant, here to talk about DevOps, monitoring and everything in between.
-
-      socialIcons:
-        - name: twitter
-          url: "https://twitter.com/srinivas_anant"
-        - name: github
-          url: "https://github.com/jsanant"
-        - name: linkedin
-          url: "https://in.linkedin.com/in/srinivasanant"
-        - name: goodreads
-          url: "https://www.goodreads.com/srinivas_anant"
+  profileMode:
+    enabled: false
+    title: "Hello Friend!" # optional default will be site title
+    subtitle: "We`` blog!"
+    imageUrl: "https://twemoji.maxcdn.com/v/latest/svg/1f977.svg" # optional
+    imageWidth: 600 # custom size
+    imageHeight: 100 # custom size
+    
 
 menu:
-    main:
-        - identifier: posts
-          name: Posts
-          url: posts/
-          weight: 10
-        - identifier: tags
-          name: Tags
-          url: tags/
-          weight: 20
-        # - identifier: projects
-        #   name: Projects
-        #   url: projects/
-        #   weight: 30
-        - identifier: archives
-          name: Archives
-          url: archives/
-          weight: 30
+  main:
+    - identifier: tags
+      name: Tags
+      url: tags/
+      weight: 10
+    - identifier: projects
+      name: Projects
+      url: projects/
+      weight: 20
+    - identifier: about
+      name: About
+      url: about/
+      weight: 30
+    - identifier: archives
+      name: Archives
+      url: archives/
+      weight: 40
