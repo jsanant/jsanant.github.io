@@ -16,15 +16,6 @@ params:
   enableGoogleAnalytics: false
   disableThemeToggle: true
 
-  profileMode:
-    enabled: false
-    title: "Hello Friend!" # optional default will be site title
-    subtitle: "We`` blog!"
-    imageUrl: "https://twemoji.maxcdn.com/v/latest/svg/1f977.svg" # optional
-    imageWidth: 600 # custom size
-    imageHeight: 100 # custom size
-    
-
 menu:
   main:
     - identifier: tags
