@@ -1,0 +1,145 @@
+<!doctype html><html lang=en dir=auto>
+<head><meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no">
+<meta name=robots content="index, follow">
+<title>Creating an ingress gateway in Consul | Srinivas Anant</title><meta name=keywords content="Consul,devops">
+<meta name=description content="Create ingress gateway using Consul, consul-template and NGINX">
+<meta name=author content="Srinivas Anant">
+<link rel=canonical href=https://srinivasanant.com/posts/ingress-gateway-in-consul/>
+<link crossorigin=anonymous href=/assets/css/stylesheet.min.c88963fe2d79462000fd0fb1b3737783c32855d340583e4523343f8735c787f0.css integrity="sha256-yIlj/i15RiAA/Q+xs3N3g8MoVdNAWD5FIzQ/hzXHh/A=" rel="preload stylesheet" as=style>
+<script defer crossorigin=anonymous src=/assets/js/highlight.min.4dcb3c4f38462f66c6b6137227726f5543cb934cca9788f041c087e374491df2.js integrity="sha256-Tcs8TzhGL2bGthNyJ3JvVUPLk0zKl4jwQcCH43RJHfI=" onload=hljs.initHighlightingOnLoad()></script>
+<link rel=icon href=https://srinivasanant.com/favicon.ico>
+<link rel=icon type=image/png sizes=16x16 href=https://srinivasanant.com/favicon-16x16.png>
+<link rel=icon type=image/png sizes=32x32 href=https://srinivasanant.com/favicon-32x32.png>
+<link rel=apple-touch-icon href=https://srinivasanant.com/apple-touch-icon.png>
+<link rel=mask-icon href=https://srinivasanant.com/safari-pinned-tab.svg>
+<meta name=theme-color content="#2e2e33">
+<meta name=msapplication-TileColor content="#2e2e33">
+<noscript>
+<style>#theme-toggle,.top-link{display:none}</style><style>@media(prefers-color-scheme:dark){:root{--theme:rgb(29, 30, 32);--entry:rgb(46, 46, 51);--primary:rgb(218, 218, 219);--secondary:rgb(155, 156, 157);--tertiary:rgb(65, 66, 68);--content:rgb(196, 196, 197);--hljs-bg:rgb(46, 46, 51);--code-bg:rgb(55, 56, 62);--border:rgb(51, 51, 51)}.list{background:var(--theme)}.list:not(.dark)::-webkit-scrollbar-track{background:0 0}.list:not(.dark)::-webkit-scrollbar-thumb{border-color:var(--theme)}}</style></noscript><meta property="og:title" content="Creating an ingress gateway in Consul">
+<meta property="og:description" content="Create ingress gateway using Consul, consul-template and NGINX">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://srinivasanant.com/posts/ingress-gateway-in-consul/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2022-08-19T18:21:36+05:30">
+<meta property="article:modified_time" content="2022-08-19T18:21:36+05:30">
+<meta name=twitter:card content="summary">
+<meta name=twitter:title content="Creating an ingress gateway in Consul">
+<meta name=twitter:description content="Create ingress gateway using Consul, consul-template and NGINX">
+<script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":2,"name":"Posts","item":"https://srinivasanant.com/posts/"},{"@type":"ListItem","position":3,"name":"Creating an ingress gateway in Consul","item":"https://srinivasanant.com/posts/ingress-gateway-in-consul/"}]}</script>
+<script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Creating an ingress gateway in Consul","name":"Creating an ingress gateway in Consul","description":"Create ingress gateway using Consul, consul-template and NGINX","keywords":["Consul","devops"],"articleBody":"Introduction In this post we will go over how we can create an ingress gateway by using Consul’s KV, NGINX and consul-template so that traffic from outside the cluster can communicate with specifc internal services.\nHere NGINX is a place holder, you can also use Envoy, HAProxy or any other reverse proxy.\nArchitecture overview  We have consul-template running as a process under supervisor in the virtual machine, you can also deploy it as a service or a system job using nomad It periodically checks Consul’s KV and service discovery if a new API config is added/removed or a new service is registered/deregistered  In the above architecture Consul KV and consul-template behave as an ad-hoc control plane and NGINX is the data plane1.\nLet’s breakdown how each of the components are configured consul-template First we need to create a consul-template file which will render the NGINX config containing all the necessary API endpoints and NGINX related configuration.\nThe first block is the upstream block where we loop over the services defined under ingress-gateway/services which need to be exposed:\n{{ range $i, $service := key \"ingress-gateway/services\" | split \",\" -}} {{ $service_key := printf \"%s\" $service }} upstream {{$service_key}} { {{ range service $service_key }} server {{.Address}}:{{.Port}}; {{else}} server 127.0.0.1:65535; {{end}} } {{end}} Next we have the main server block which renders the endpoints of the services:\nserver { listen {{ $route_data.port }} {{if $route_data.protocol | eq \"http2\"}}http2{{end}} {{ if $route_data.ssl | eq true }}ssl{{end}};   server_name {{ printf \"%s\" .Key }};  {{range $route := $route_data.routes}} {{- $service_key := printf \"%s\" $route.service -}} location {{$route.path}} { proxy_pass {{ $route.proxyPassProtocol }}://{{$service_key}}{{$route.proxyPassPathSuffix}}; proxy_http_version 1.1; proxy_set_header Connection \"\"; proxy_set_header Host $http_host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; } {{end}} {{end}} } Consul KV The high level KV structure is as follows:\n ingress-gateway/hosts: The DNS/hosts entries to where traffic should be routed to ingress-gateway/port: Port on which NGINX needs to run ingress-gateway/service: Services that need to be exposed to the outside world, the naming convention is similar to the service registered on the service discovery ingress-gateways/shared: Any shared nginx config, such as SSL chiper config  The main routing configuration is stored under the hosts folder:\n ingress-gateway/hosts/hello.example.com  port: 80 protocol: http1 ssl: false # If SSL is enabled the certificate block will be rendered routes:  - path: / # The location block path  proxyPassProtocol: http # It can be gRPC protocol  proxyPassPathSuffix: / # Any paths that need to be added to the API  service: hello-world # The service name registered in Consul SD   This can be further extended to create different paths under the same host or you can also create different host entries under the hosts folder.\nFor example: ingress-gateway/hosts/foo.example.com, which can contain it’s own API endpoints\nNGINX And here is the rendered NGINX config:\nupstream hello-world { server 127.0.0.1:5000; }  server { listen 80;   server_name hello.example.com;   location / {  proxy_pass http://hello-world/;  proxy_http_version 1.1;  proxy_set_header Connection \"\";  proxy_set_header Host $http_host;  proxy_set_header X-Real-IP $remote_addr;  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  proxy_set_header X-Forwarded-Proto $scheme;  } }  server { listen 80 default*server; server_name *; } Let’s see it in action Fun fact the Consul URL that is being used is reverse proxied through the same NGINX running on the VM!\nFull example You can deploy the whole setup on your laptop and take it for a spin by following these steps!\nConclusion I hope you got an understanding of how to create an ingress-gateway in a Consul using NGINX, Consul KV and consul-template.\nIf you have any questions or any feedback, please let me know! :)\n  Control Plane and Data Plane ↩︎\n   ","wordCount":"592","inLanguage":"en","datePublished":"2022-08-19T18:21:36+05:30","dateModified":"2022-08-19T18:21:36+05:30","author":{"@type":"Person","name":"Srinivas Anant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://srinivasanant.com/posts/ingress-gateway-in-consul/"},"publisher":{"@type":"Organization","name":"Srinivas Anant","logo":{"@type":"ImageObject","url":"https://srinivasanant.com/favicon.ico"}}}</script>
+</head><body id=top>
+<script>window.matchMedia("(prefers-color-scheme: dark)").matches&&document.body.classList.add("dark")</script>
+<header class=header>
+<nav class=nav>
+<div class=logo>
+<a href=https://srinivasanant.com accesskey=h title="Srinivas Anant (Alt + H)">Srinivas Anant</a>
+<span class=logo-switches>
+</span>
+</div><ul id=menu>
+<li>
+<a href=https://srinivasanant.com/tags/ title=Tags>
+<span>Tags</span>
+</a>
+</li><li>
+<a href=https://srinivasanant.com/projects/ title=Projects>
+<span>Projects</span>
+</a>
+</li><li>
+<a href=https://srinivasanant.com/about/ title=About>
+<span>About</span>
+</a>
+</li><li>
+<a href=https://srinivasanant.com/archives/ title=Archives>
+<span>Archives</span>
+</a>
+</li></ul></nav></header><main class=main>
+<article class=post-single>
+<header class=post-header>
+<h1 class=post-title>
+Creating an ingress gateway in Consul
+</h1><div class=post-meta><span title="2022-08-19 18:21:36 +0530 +0530">August 19, 2022</span>&nbsp;·&nbsp;3 min&nbsp;·&nbsp;Srinivas Anant
+</div></header><div class=post-content><h3 id=introduction>Introduction<a hidden class=anchor aria-hidden=true href=#introduction>#</a></h3><p>In this post we will go over how we can create an ingress gateway by using Consul&rsquo;s KV, NGINX and consul-template so that traffic from outside the cluster can communicate with specifc internal services.</p><p>Here <code>NGINX</code> is a place holder, you can also use <a href=https://www.envoyproxy.io/>Envoy</a>, <a href=http://www.haproxy.org/>HAProxy</a> or any other reverse proxy.</p><h3 id=architecture-overview>Architecture overview<a hidden class=anchor aria-hidden=true href=#architecture-overview>#</a></h3><p><img loading=lazy src=/ingress_gateway.png#center alt="ingress gateway">
+</p><ul>
+<li>We have consul-template running as a process under <a href=http://supervisord.org/>supervisor</a> in the virtual machine, you can also deploy it as a service or a system <a href=https://www.nomadproject.io/docs/job-specification/job#type>job</a> using <a href=https://www.nomadproject.io/>nomad</a></li><li>It periodically checks Consul&rsquo;s KV and service discovery if a new API config is added/removed or a new service is registered/deregistered</li></ul><p>In the above architecture Consul KV and consul-template behave as an ad-hoc control plane and NGINX is the data plane<sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>.</p><h3 id=lets-breakdown-how-each-of-the-components-are-configured>Let&rsquo;s breakdown how each of the components are configured<a hidden class=anchor aria-hidden=true href=#lets-breakdown-how-each-of-the-components-are-configured>#</a></h3><h4 id=consul-template>consul-template<a hidden class=anchor aria-hidden=true href=#consul-template>#</a></h4><p>First we need to create a consul-template file which will render the NGINX config containing all the necessary API endpoints and NGINX related configuration.</p><p>The first block is the upstream block where we loop over the services defined under <code>ingress-gateway/services</code> which need to be exposed:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-go-text-template data-lang=go-text-template><span style=display:flex><span><span style=color:#75715e>{{</span> <span style=color:#66d9ef>range</span>  <span style=color:#a6e22e>$i</span><span style=color:#f92672>,</span> <span style=color:#a6e22e>$service</span> <span style=color:#f92672>:=</span> <span style=color:#a6e22e>key</span> <span style=color:#e6db74>&#34;ingress-gateway/services&#34;</span>  <span style=color:#f92672>|</span> <span style=color:#a6e22e>split</span>  <span style=color:#e6db74>&#34;,&#34;</span> <span style=color:#75715e>-}}</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span> <span style=color:#a6e22e>$service_key</span> <span style=color:#f92672>:=</span> <span style=color:#66d9ef>printf</span> <span style=color:#e6db74>&#34;%s&#34;</span> <span style=color:#a6e22e>$service</span> <span style=color:#75715e>}}</span>  
+</span></span><span style=display:flex><span>upstream <span style=color:#75715e>{{</span><span style=color:#a6e22e>$service_key</span><span style=color:#75715e>}}</span> {
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span> <span style=color:#66d9ef>range</span> <span style=color:#a6e22e>service</span> <span style=color:#a6e22e>$service_key</span>  <span style=color:#75715e>}}</span>
+</span></span><span style=display:flex><span>server <span style=color:#75715e>{{</span><span style=color:#a6e22e>.Address</span><span style=color:#75715e>}}</span>:<span style=color:#75715e>{{</span><span style=color:#a6e22e>.Port</span><span style=color:#75715e>}}</span>;
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span><span style=color:#66d9ef>else</span><span style=color:#75715e>}}</span>
+</span></span><span style=display:flex><span>server 127.0.0.1:65535;
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span><span style=color:#66d9ef>end</span><span style=color:#75715e>}}</span>
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span><span style=color:#66d9ef>end</span><span style=color:#75715e>}}</span></span></span></code></pre></div><p>Next we have the main server block which renders the endpoints of the services:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-go-text-template data-lang=go-text-template><span style=display:flex><span>server {
+</span></span><span style=display:flex><span>listen <span style=color:#75715e>{{</span> <span style=color:#a6e22e>$route_data</span><span style=color:#a6e22e>.port</span> <span style=color:#75715e>}}</span> <span style=color:#75715e>{{</span><span style=color:#66d9ef>if</span> <span style=color:#a6e22e>$route_data</span><span style=color:#a6e22e>.protocol</span> <span style=color:#f92672>|</span> <span style=color:#66d9ef>eq</span> <span style=color:#e6db74>&#34;http2&#34;</span><span style=color:#75715e>}}</span>http2<span style=color:#75715e>{{</span><span style=color:#66d9ef>end</span><span style=color:#75715e>}}</span> <span style=color:#75715e>{{</span> <span style=color:#66d9ef>if</span> <span style=color:#a6e22e>$route_data</span><span style=color:#a6e22e>.ssl</span> <span style=color:#f92672>|</span> <span style=color:#66d9ef>eq</span> <span style=color:#66d9ef>true</span> <span style=color:#75715e>}}</span>ssl<span style=color:#75715e>{{</span><span style=color:#66d9ef>end</span><span style=color:#75715e>}}</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    server_name <span style=color:#75715e>{{</span> <span style=color:#66d9ef>printf</span> <span style=color:#e6db74>&#34;%s&#34;</span> <span style=color:#a6e22e>.Key</span>  <span style=color:#75715e>}}</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span><span style=color:#66d9ef>range</span> <span style=color:#a6e22e>$route</span> <span style=color:#f92672>:=</span> <span style=color:#a6e22e>$route_data</span><span style=color:#a6e22e>.routes</span><span style=color:#75715e>}}</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>{{-</span> <span style=color:#a6e22e>$service_key</span> <span style=color:#f92672>:=</span> <span style=color:#66d9ef>printf</span> <span style=color:#e6db74>&#34;%s&#34;</span> <span style=color:#a6e22e>$route</span><span style=color:#a6e22e>.service</span> <span style=color:#75715e>-}}</span>
+</span></span><span style=display:flex><span>location <span style=color:#75715e>{{</span><span style=color:#a6e22e>$route</span><span style=color:#a6e22e>.path</span><span style=color:#75715e>}}</span> {
+</span></span><span style=display:flex><span>proxy_pass <span style=color:#75715e>{{</span> <span style=color:#a6e22e>$route</span><span style=color:#a6e22e>.proxyPassProtocol</span> <span style=color:#75715e>}}</span>://<span style=color:#75715e>{{</span><span style=color:#a6e22e>$service_key</span><span style=color:#75715e>}}{{</span><span style=color:#a6e22e>$route</span><span style=color:#a6e22e>.proxyPassPathSuffix</span><span style=color:#75715e>}}</span>;
+</span></span><span style=display:flex><span>proxy_http_version 1.1;
+</span></span><span style=display:flex><span>proxy_set_header Connection &#34;&#34;;
+</span></span><span style=display:flex><span>proxy_set_header Host $http_host;
+</span></span><span style=display:flex><span>proxy_set_header X-Real-IP $remote_addr;
+</span></span><span style=display:flex><span>proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+</span></span><span style=display:flex><span>proxy_set_header X-Forwarded-Proto $scheme;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span><span style=color:#66d9ef>end</span><span style=color:#75715e>}}</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>{{</span><span style=color:#66d9ef>end</span><span style=color:#75715e>}}</span>
+</span></span><span style=display:flex><span>}</span></span></code></pre></div><h4 id=consul-kv>Consul KV<a hidden class=anchor aria-hidden=true href=#consul-kv>#</a></h4><p>The high level KV structure is as follows:</p><ul>
+<li><code>ingress-gateway/hosts</code>: The DNS/hosts entries to where traffic should be routed to</li><li><code>ingress-gateway/port</code>: Port on which NGINX needs to run</li><li><code>ingress-gateway/service</code>: Services that need to be exposed to the outside world, the naming convention is similar to the service registered on the service discovery</li><li><code>ingress-gateways/shared</code>: Any shared nginx config, such as SSL chiper config</li></ul><p>The main routing configuration is stored under the hosts folder:</p><ul>
+<li><code>ingress-gateway/hosts/hello.example.com</code></li></ul><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#f92672>port</span>: <span style=color:#ae81ff>80</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>protocol</span>: <span style=color:#ae81ff>http1</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>ssl</span>: <span style=color:#66d9ef>false</span> <span style=color:#75715e># If SSL is enabled the certificate block will be rendered</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>routes</span>:
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>- <span style=color:#f92672>path</span>: <span style=color:#ae81ff>/</span> <span style=color:#75715e># The location block path</span>
+</span></span><span style=display:flex><span>  <span style=color:#f92672>proxyPassProtocol</span>: <span style=color:#ae81ff>http</span> <span style=color:#75715e># It can be gRPC protocol</span>
+</span></span><span style=display:flex><span>  <span style=color:#f92672>proxyPassPathSuffix</span>: <span style=color:#ae81ff>/</span> <span style=color:#75715e># Any paths that need to be added to the API</span>
+</span></span><span style=display:flex><span>  <span style=color:#f92672>service</span>: <span style=color:#ae81ff>hello-world</span> <span style=color:#75715e># The service name registered in Consul SD</span>
+</span></span><span style=display:flex><span>  </span></span></code></pre></div><p>This can be further extended to create different paths under the same host or you can also create different host entries under the <code>hosts</code> folder.</p><p>For example: <code>ingress-gateway/hosts/foo.example.com</code>, which can contain it&rsquo;s own API endpoints</p><h4 id=nginx>NGINX<a hidden class=anchor aria-hidden=true href=#nginx>#</a></h4><p>And here is the rendered NGINX config:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-nginx data-lang=nginx><span style=display:flex><span><span style=color:#66d9ef>upstream</span> <span style=color:#e6db74>hello-world</span> {
+</span></span><span style=display:flex><span><span style=color:#f92672>server</span> 127.0.0.1:<span style=color:#ae81ff>5000</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>server</span> {
+</span></span><span style=display:flex><span><span style=color:#f92672>listen</span> <span style=color:#ae81ff>80</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f92672>server_name</span> <span style=color:#e6db74>hello.example.com</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f92672>location</span> <span style=color:#e6db74>/</span> {
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_pass</span> <span style=color:#e6db74>http://hello-world/</span>;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_http_version</span> <span style=color:#ae81ff>1</span><span style=color:#e6db74>.1</span>;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_set_header</span> <span style=color:#e6db74>Connection</span> <span style=color:#e6db74>&#34;&#34;</span>;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_set_header</span> <span style=color:#e6db74>Host</span> $http_host;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_set_header</span> <span style=color:#e6db74>X-Real-IP</span> $remote_addr;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_set_header</span> <span style=color:#e6db74>X-Forwarded-For</span> $proxy_add_x_forwarded_for;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>proxy_set_header</span> <span style=color:#e6db74>X-Forwarded-Proto</span> $scheme;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>server</span> {
+</span></span><span style=display:flex><span><span style=color:#f92672>listen</span> <span style=color:#ae81ff>80</span> <span style=color:#e6db74>default*server</span>;
+</span></span><span style=display:flex><span><span style=color:#f92672>server_name</span> <span style=color:#e6db74>*</span>;
+</span></span><span style=display:flex><span>}</span></span></code></pre></div><h3 id=lets-see-it-in-action>Let&rsquo;s see it in action<a hidden class=anchor aria-hidden=true href=#lets-see-it-in-action>#</a></h3><p><img loading=lazy src=/ingress-gateway.gif#center alt="ingress gateway">
+</p><p>Fun fact the Consul URL that is being used is reverse proxied through the same NGINX running on the VM!</p><h3 id=full-example>Full example<a hidden class=anchor aria-hidden=true href=#full-example>#</a></h3><p>You can deploy the whole setup on your laptop and take it for a spin by following these <a href=https://github.com/jsanant/blog-post-examples/tree/main/ingress-gateway>steps</a>!</p><h3 id=conclusion>Conclusion<a hidden class=anchor aria-hidden=true href=#conclusion>#</a></h3><p>I hope you got an understanding of how to create an ingress-gateway in a Consul using NGINX, Consul KV and consul-template.</p><p>If you have any questions or any feedback, please let me know! :)</p><section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p><a href=https://medium.com/envoyproxy/service-mesh-data-plane-vs-control-plane-2774e720f7fc>Control Plane and Data Plane</a>&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p></li></ol></section></div><footer class=post-footer>
+<ul class=post-tags>
+<li><a href=https://srinivasanant.com/tags/consul/>Consul</a></li><li><a href=https://srinivasanant.com/tags/devops/>devops</a></li></ul></footer></article></main><footer class=footer>
+<span>&copy; 2022 <a href=https://srinivasanant.com>Srinivas Anant</a></span>
+<span>
+Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+        <a href=https://git.io/hugopapermod rel=noopener target=_blank>PaperMod</a>
+</span>
+</footer><a href=#top aria-label="go to top" title="Go to Top (Alt + G)" class=top-link id=top-link accesskey=g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentcolor"><path d="M12 6H0l6-6z"/></svg>
+</a>
+<script>let menu=document.getElementById("menu");menu&&(menu.scrollLeft=localStorage.getItem("menu-scroll-position"),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}),document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(t){t.preventDefault();var e=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(e)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(e)}']`).scrollIntoView({behavior:"smooth"}),e==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${e}`)})})</script>
+<script>var mybutton=document.getElementById("top-link");window.onscroll=function(){document.body.scrollTop>800||document.documentElement.scrollTop>800?(mybutton.style.visibility="visible",mybutton.style.opacity="1"):(mybutton.style.visibility="hidden",mybutton.style.opacity="0")}</script>
+<script>document.querySelectorAll("pre > code").forEach(t=>{const n=t.parentNode.parentNode,e=document.createElement("button");e.classList.add("copy-code"),e.innerText="copy";function s(){e.innerText="copied!",setTimeout(()=>{e.innerText="copy"},2e3)}e.addEventListener("click",o=>{if("clipboard"in navigator){navigator.clipboard.writeText(t.textContent),s();return}const e=document.createRange();e.selectNodeContents(t);const n=window.getSelection();n.removeAllRanges(),n.addRange(e);try{document.execCommand("copy"),s()}catch(e){}n.removeRange(e)}),n.classList.contains("highlight")?n.appendChild(e):n.parentNode.firstChild==n||(t.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?t.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(e):t.parentNode.appendChild(e))})</script>
+</body></html>
