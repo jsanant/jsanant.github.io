@@ -2,7 +2,7 @@
 title: "Creating an ingress gateway in Consul"
 summary: "Create ingress gateway using Consul, consul-template and NGINX"
 date: 2022-08-19T18:21:36+05:30
-draft: true
+draft: false
 tags: ["Consul", "devops"]
 ---
 
