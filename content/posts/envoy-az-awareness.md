@@ -31,7 +31,7 @@ As mentioned previously we will need to define the `local_cluster_name` in the e
 
 {{< highlight yaml >}}
 cluster_manager:
-local_cluster_name: service-a
+  local_cluster_name: service-a
 {{< /highlight >}}
 
 The above `local_cluster_name` is defined in `Service-A`. Similarly the `local_cluster_name` will change for `Service-B`.
@@ -42,8 +42,8 @@ This is the main component that should to be enabled in the cluster section alon
 
 {{< highlight yaml >}}
 locality:
-region: us-east-1
-zone: us-east-1b
+  region: us-east-1
+  zone: us-east-1b
 priority: 1
 {{< /highlight >}}
 
@@ -52,35 +52,39 @@ Based on the priority envoy will route requests to desired microservice spread a
 #### Cluster block
 
 {{< highlight yaml >}}
-
 - name: service-b
   connect_timeout: 10s
   type: STRICT_DNS
   lb_policy: ROUND_ROBIN
   load_assignment:
-  cluster_name: service-b
-  endpoints: - lb_endpoints: - endpoint:
-  address:
-  socket_address:
-  address: service-b-az1
-  port_value: 80
-  locality:
-  region: us-east-1
-  zone: us-east-1a
-  priority: 1 - lb_endpoints: - endpoint:
-  address:
-  socket_address:
-  address: service-b-az2
-  port_value: 80
-  locality:
-  region: us-east-1
-  zone: us-east-1b
-  priority: 2
-  {{< /highlight >}}
+    cluster_name: service-b
+    endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: service-b-az1
+                port_value: 80
+        locality:
+          region: us-east-1
+          zone: us-east-1a
+        priority: 1
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: service-b-az2
+                port_value: 80
+        locality:
+          region: us-east-1
+          zone: us-east-1b
+        priority: 2
+{{< /highlight >}}
 
-As you can see here, `Service-B` has two endpoints, one in AZ-1 and the other in AZ-2 when `Service-A` communicates with `Service-B` all requests will go to microservice present in AZ-1 because the priority for it is set to `1`.
+As you can see here, `Service-B` has two endpoints, one in AZ-1 and the other in AZ-2 when `Service-A` communicates with `Service-B` all requests will go to microservice present in AZ-1 because the priority for it is set to `1`. 
 
 If the priority is set to `1` for `Service-B` in AZ-2 then envoy will send requests to both the endpoints in a round robin fashion.
+
 
 #### Putting it all together
 
@@ -88,109 +92,115 @@ Now let's put all the individual blocks together:
 
 {{< highlight yaml >}}
 cluster_manager:
-local_cluster_name: service-a
-
+  local_cluster_name: service-a
+ 
 admin:
-access_log_path: /tmp/admin_access.log
-address:
-socket_address: { address: 0.0.0.0, port_value: 5555 }
-
+  access_log_path: /tmp/admin_access.log
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 5555 }
+ 
 static_resources:
-listeners:
-
-- name: service-a
-  address:
-  socket_address: { address: 0.0.0.0, port_value: 80 }
-  filter_chains:
-  - filters:
-    - name: envoy.filters.network.http_connection_manager
-      typed_config:
-      "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-      stat_prefix: ingress_http
-      access_log:
-      - name: envoy.file_access_log
+  listeners:
+  - name: service-a
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 80 }
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
         typed_config:
-        "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
-        path: "/var/log/service-a.log"
-        codec_type: AUTO
-        route_config:
-        name: wildcard
-        virtual_hosts:
-        - name: wildcard
-          domains: ["*"]
-          routes: - match: { prefix: "/" }
-          route: { cluster: service-a, timeout: 90s }
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          access_log:
+          - name: envoy.file_access_log
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: "/var/log/service-a.log"
+          codec_type: AUTO
+          route_config:
+            name: wildcard
+            virtual_hosts:
+            - name: wildcard
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: service-a, timeout: 90s }
           http_filters:
-      - name: envoy.filters.http.router
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router 
+  - name: service-b
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 8082 }
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
         typed_config:
-        "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
-- name: service-b
-  address:
-  socket_address: { address: 0.0.0.0, port_value: 8082 }
-  filter_chains:
-  - filters: - name: envoy.filters.network.http_connection_manager
-    typed_config:
-    "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-    stat_prefix: ingress_http
-    access_log: - name: envoy.file_access_log
-    typed_config:
-    "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
-    path: "/var/log/service-b.log"
-    codec_type: AUTO
-    route_config:
-    name: wildcard
-    virtual_hosts: - name: wildcard
-    domains: ["*"]
-    routes: - match: { prefix: "/" }
-    route: { cluster: service-b, timeout: 90s }
-    http_filters: - name: envoy.filters.http.router
-    typed_config:
-    "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
-    clusters:
-- name: service-a
-  connect_timeout: 10s
-  type: STATIC
-  lb_policy: ROUND_ROBIN
-  load_assignment:
-  cluster_name: service-a
-  endpoints:
-  - lb_endpoints:
-    - endpoint:
-      address:
-      socket_address:
-      address: 0.0.0.0
-      port_value: 8081
-      locality:
-      region: us-east-1
-      zone: us-east-1a
-- name: service-b
-  connect_timeout: 10s
-  type: STRICT_DNS
-  lb_policy: ROUND_ROBIN
-  load_assignment:
-  cluster_name: service-b
-  endpoints: - lb_endpoints: - endpoint:
-  address:
-  socket_address:
-  address: service-b-az1
-  port_value: 80
-  locality:
-  region: us-east-1
-  zone: us-east-1a
-  priority: 1
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          access_log:
+          - name: envoy.file_access_log
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: "/var/log/service-b.log"
+          codec_type: AUTO
+          route_config:
+            name: wildcard
+            virtual_hosts:
+            - name: wildcard
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: service-b, timeout: 90s }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+  - name: service-a
+    connect_timeout: 10s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: service-a
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 0.0.0.0
+                port_value: 8081
+        locality:
+          region: us-east-1
+          zone: us-east-1a
+  - name: service-b
+    connect_timeout: 10s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: service-b
+      endpoints:
+        - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: service-b-az1
+                  port_value: 80
+          locality:
+            region: us-east-1
+            zone: us-east-1a
+          priority: 1
 
-          - lb_endpoints:
-            - endpoint:
-                address:
-                  socket_address:
-                    address: service-b-az2
-                    port_value: 80
-            locality:
-              region: us-east-1
-              zone: us-east-1b
-            priority: 2
-
-  {{< /highlight >}}
+        - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: service-b-az2
+                  port_value: 80
+          locality:
+            region: us-east-1
+            zone: us-east-1b
+          priority: 2
+{{< /highlight >}}
 
 ### Demo
 
