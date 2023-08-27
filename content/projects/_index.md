@@ -1,6 +1,6 @@
 ## Personal Projects
 
-- [vmtctl](https://github.com/jsanant/vmtctl) - A CLI tool to generate multi-tenant URLs in victoria-metrics
+- [vmtctl](https://github.com/jsanant/vmtctl) - A CLI tool to generate multi-tenant URLs in victoria-metrics locally
 
 ## Open source contribution
 
