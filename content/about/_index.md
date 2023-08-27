@@ -7,5 +7,5 @@
 # Contact
 
 - [Twitter](https://twitter.com/srinivas_anant)
-- [Github](https://google.com)
+- [Github](https://github.com/jsanant)
 - [LinkedIn](https://in.linkedin.com/in/srinivasanant)
